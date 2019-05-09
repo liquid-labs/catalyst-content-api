@@ -71,11 +71,14 @@ func ContentGeneralWhereGenerator(term string, params []interface{}) (string, []
   return whereBit, params, nil
 }
 
-const CommonContentTypeTextFields = `e.pub_id, e.last_updated, c.title, c.summary, c.slug, c.type, c.format, c.text, c.extern_path, c.last_sync, c.version_cookie, p.pub_id, p.display_name, pc.role, pc.summary_credit_order `
-const CommonContentTypeTextFrom = `FROM content c JOIN contributors pc ON c.id=pc.content JOIN persons p ON cp.id=p.id `
+const CommonContentFields = `e.pub_id, e.last_updated, c.title, c.summary, c.slug, c.type `
+const CommonCententTypeTextFields = `ctt.format, ctt.text, c.extern_path, c.last_sync, c.version_cookie `
+const CommonContentContribFields = `p.pub_id, p.display_name, pc.role, pc.summary_credit_order `
+const CommonContentFrom = `FROM content c JOIN contributors pc ON c.id=pc.content JOIN persons p ON cp.id=p.id `
+const CommonContentTypeTextFrom = `JOIN ctt content_type_text ON c.id=ctt.id `
 
 const createContentStatement = `INSERT INTO content (id, extern_path, slug, type, title, summary, version_cookie) VALUES(?,?,?,?,?,?,?)`
-const createContentTypeTextStatement = `INSERT INTO content_type_tex (id, format, text) VALUES(?,?,?)`
+const createContentTypeTextStatement = `INSERT INTO content_type_text (id, format, text) VALUES(?,?,?)`
 func CreateTypeTextContent(c *ContentTypeText, ctx context.Context) (*ContentText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
@@ -115,7 +118,7 @@ func CreateContentTypeTextInTxn(c *ContentTypeText, ctx context.Context, txn *sq
 
   defer txn.Commit()
 
-  newContent, err := SyncContent(c, ctx)
+  newContent, err := SyncContentTypeText(c, ctx)
   if err != nil {
     return nil, rest.ServerError("Record created, but could not perform initial sync with external resource.", err)
   }
@@ -123,89 +126,89 @@ func CreateContentTypeTextInTxn(c *ContentTypeText, ctx context.Context, txn *sq
   return newContent, nil
 }
 
-const CommonContentGet string = `SELECT ` + CommonContentFields + `, c.id, loc.id, ea.idx, ea.label, loc.address1, loc.address2, loc.city, loc.state, loc.zip, loc.lat, loc.lng ` + CommonContentFrom + ` LEFT JOIN entity_addresses ea ON c.id=ea.entity_id AND ea.idx >= 0 LEFT JOIN locations loc ON ea.location_id=loc.id `
-const getContentStatement string = CommonContentGet + `WHERE e.pub_id=? `
+const CommonContentTypeTextGet string = `SELECT ` + CommonContentFields + CommonContentTypeTextFields + CommonContentFrom + CommonContentTypeTextFrom
+const getContentTypeTextStatement string = CommonContentTypeTextGet + `WHERE e.pub_id=? `
 
-// GetContent retrieves a Content from a public ID string (UUID). Attempting to
-// retrieve a non-existent Content results in a rest.NotFoundError. This is used
-// primarily to retrieve a Content in response to an API request.
+// GetContentTypeText retrieves a ContentTypeText from a public ID string
+// (UUID). Attempting to  retrieve a non-existent item results in a
+// rest.NotFoundError. This is used primarily to retrieve an item in response to
+// an API request.
 //
-// Consider using GetContentByID to retrieve a Content from another backend/DB
-// function. TODO: reference discussion of internal vs public IDs.
-func GetContent(pubId string, ctx context.Context) (*Content, rest.RestError) {
-  return getContentHelper(getContentQuery, pubId, ctx, nil)
+// Consider using GetContentTextTypeByID to retrieve a ContentTextType from
+// another backend/DB function. TODO: reference discussion of internal vs public
+// IDs.
+func GetContentTypeText(pubID string, ctx context.Context) (*ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentTypeTextQuery, ctx, nil, pubID)
 }
 
-// GetContentInTxn retrieves a Content by public ID string (UUID) in the context
-// of an existing transaction. See GetContent.
-func GetContentInTxn(pubId string, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
-  return getContentHelper(getContentQuery, pubId, ctx, txn)
+// GetContentTypeTextInTxn retrieves a ContentTypeTex by public ID string (UUID)
+//  in the context of an existing transaction. See GetContentTypeText.
+func GetContentTypeTextInTxn(pubID string, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentTypeTextQuery, ctx, txn, pubID)
 }
 
-const getContentByAuthIdStatement string = CommonContentGet + ` WHERE u.auth_id=? `
-// GetContentByAuthId retrieves a Content from a public authentication ID string
-// provided by the authentication provider (firebase). Attempting to retrieve a
-// non-existent Content results in a rest.NotFoundError. This is used primarily
-// to retrieve a Content in response to an API request, especially
-// '/content/self'.
-func GetContentByAuthId(authId string, ctx context.Context) (*Content, rest.RestError) {
-  return getContentHelper(getContentByAuthIdQuery, authId, ctx, nil)
+const getContentTypeTextByNSSlugStatement string = CommonContentTypeTextGet + ` WHERE c.namespace=? AND c.slug=? `
+// GetContentTypeTextByNSSlug retrieves a ContentTypeText from a content
+// namespace and slug. Attempting to retrieve a non-existent item results in a
+// rest.NotFoundError. This is used primarily to retrieve an item in response to
+// an API request.
+func GetContentTypeTextByNSSlug(namespace string, slug string, ctx context.Context) (*ContentTypeText, rest.RestError) {
+  return getContentHelper(getContentByNSSlugQuery, ctx, nil, namespace, slug)
 }
 
-// GetContentByAuthIdInTxn retrieves a Content by public authentication ID string
-// in the context of an existing transaction. See GetContentByAuthId.
-func GetContentByAuthIdInTxn(authId string, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
-  return getContentHelper(getContentByAuthIdQuery, authId, ctx, txn)
+// GetContentTextTypeByNSSlugInTxn retrieves a ContentTextType by a namespace
+// and slug in the context of an existing transaction. See
+// GetContentTypeTextByNSSlug.
+func GetContentTypeTextByNSSlugInTxn(namespace string, slug string, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
+  return getContentHelper(getContentByAuthIdQuery, ctx, txn, namespace, slug)
 }
 
-const getContentByIdStatement string = CommonContentGet + ` WHERE c.id=? `
-// GetContentByID retrieves a Content by internal ID. As the internal ID must
-// never be exposed to users, this method is exclusively for internal/backend
-// use. Specifically, since Content are associated with other Entities through
-// the internal ID (i.e., foreign keys use the internal ID), this function is
-// most often used to retrieve a Content which is to be bundled in a response.
+const getContentTextTypeByIDStatement string = CommonContentTypeTextGet + ` WHERE c.id=? `
+// GetContentTypeTextByID retrieves a ContentTypeText by internal ID. As the
+// internal ID must never be exposed to users, this method is exclusively for
+// internal/backend use. Specifically, since ContentTextType are associated with
+// other Entities through the internal ID (i.e., foreign keys use the internal
+// ID), this function is most often used to retrieve a ContentTextType which is
+// to be bundled in a response.
 //
-// Use GetContent to retrieve a Content in response to an API request. TODO:
-// reference discussion of internal vs public IDs.
-func GetContentByID(id int64, ctx context.Context) (*Content, rest.RestError) {
-  return getContentHelper(getContentByIdQuery, id, ctx, nil)
+// Use GetContentTypeText to retrieve a ContentTypeText in response to an API
+// request. TODO: reference discussion of internal vs public IDs.
+func GetContentTypeTextByID(id int64, ctx context.Context) (*ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentTypeTextByIDQuery, ctx, nil, id)
 }
 
 // GetContentByIDInTxn retrieves a Content by internal ID in the context of an
 // existing transaction. See GetContentByID.
-func GetContentByIDInTxn(id int64, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
-  return getContentHelper(getContentByIdQuery, id, ctx, txn)
+func GetContentByIDInTxn(id int64, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentByIDQuery, ctx, txn, id)
 }
 
-func getContentHelper(stmt *sql.Stmt, id interface{}, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
+func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, ids ...interface{}) (*ContentTypeText, rest.RestError) {
   if txn != nil {
     stmt = txn.Stmt(stmt)
   }
-	rows, err := stmt.QueryContext(ctx, id)
+	rows, err := stmt.QueryContext(ctx, ids...)
 	if err != nil {
 		return nil, rest.ServerError("Error retrieving content.", err)
 	}
 	defer rows.Close()
 
-	var content *Content
-  var address *locations.Address
-  var addresses locations.Addresses = make(locations.Addresses, 0)
+	var content *ContentTypeText
+  var contributor ContributorSummary
+  var contributors ContributorSummaries = make(ContributorSummaries, 0)
 	for rows.Next() {
     var err error
     // The way the scanner works, it processes all the data each time. :(
     // 'content' gets updated with an equivalent structure while we gather up
-    // the addresses.
-    if content, address, err = ScanContentDetail(rows); err != nil {
+    // the contributors.
+    if content, contributor, err = ScanContentDetail(rows); err != nil {
       return nil, rest.ServerError(fmt.Sprintf("Problem getting data for content: '%v'", id), err)
     }
 
-    if address.LocationId.Valid {
-	    addresses = append(addresses, address)
-    }
+    contributors = append(contributors, contributor)
 	}
   if content != nil {
-    content.Addresses = addresses
-    content.FormatOut()
+    content.Contributors = contributors
   } else {
     return nil, rest.NotFoundError(fmt.Sprintf(`Content '%s' not found.`, id), nil)
   }
@@ -213,13 +216,9 @@ func getContentHelper(stmt *sql.Stmt, id interface{}, ctx context.Context, txn *
 	return content, nil
 }
 
-// BUG(zane@liquid-labs.com): UpdateContent should use internal IDs if available
-// on the Content struct. (I'm assuming this is slightly more efficient, though
-// we should test.)
-
 // UpdatesContent updates the canonical Content record. Attempting to update a
 // non-existent Content results in a rest.NotFoundError.
-func UpdateContent(p *Content, ctx context.Context) (*Content, rest.RestError) {
+func UpdateContent(p *ContentTypeText, ctx context.Context) (*ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
@@ -272,7 +271,7 @@ func UpdateContentInTxn(p *Content, ctx context.Context, txn *sql.Tx) (*Content,
 
 // TODO: enable update of AuthID
 const updateContentStatement = `UPDATE content c JOIN users u ON u.id=c.id JOIN entities e ON c.id=e.id SET u.active=?, u.legal_id=?, u.legal_id_type=?, c.display_name=?, c.phone=?, c.email=?, c.phone_backup=?, e.last_updated=0 WHERE e.pub_id=?`
-var createContentQuery, updateContentQuery, getContentQuery, getContentByAuthIdQuery, getContentByIdQuery *sql.Stmt
+var createContentQuery, updateContentQuery, getContentQuery, getContentByAuthIdQuery, getContentByIDQuery *sql.Stmt
 func SetupDB(db *sql.DB) {
   var err error
   if createContentQuery, err = db.Prepare(createContentStatement); err != nil {
@@ -284,7 +283,7 @@ func SetupDB(db *sql.DB) {
   if getContentByAuthIdQuery, err = db.Prepare(getContentByAuthIdStatement); err != nil {
     log.Fatalf("mysql: prepare get content by auth ID stmt: %v", err)
   }
-  if getContentByIdQuery, err = db.Prepare(getContentByIdStatement); err != nil {
+  if getContentByIDQuery, err = db.Prepare(getContentByIDStatement); err != nil {
     log.Fatalf("mysql: prepare get content by ID stmt: %v", err)
   }
   if updateContentQuery, err = db.Prepare(updateContentStatement); err != nil {
