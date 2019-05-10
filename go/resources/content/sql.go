@@ -33,7 +33,7 @@ func ScanContentSummary(row *sql.Rows) (*ContentSummary, *ContributorSummary, er
 	return &c, &p, nil
 }
 
-func ScanContentTextTypeDetail(row *sql.Rows) (*Content, *locations.Address, error) {
+func ScanContentTypeTextDetail(row *sql.Rows) (*Content, *locations.Address, error) {
   var c Content
   var p ContributorSummary
 
@@ -134,7 +134,7 @@ const getContentTypeTextStatement string = CommonContentTypeTextGet + `WHERE e.p
 // rest.NotFoundError. This is used primarily to retrieve an item in response to
 // an API request.
 //
-// Consider using GetContentTextTypeByID to retrieve a ContentTextType from
+// Consider using GetContentTypeTextByID to retrieve a ContentTypeText from
 // another backend/DB function. TODO: reference discussion of internal vs public
 // IDs.
 func GetContentTypeText(pubID string, ctx context.Context) (*ContentTypeText, rest.RestError) {
@@ -156,19 +156,19 @@ func GetContentTypeTextByNSSlug(namespace string, slug string, ctx context.Conte
   return getContentHelper(getContentByNSSlugQuery, ctx, nil, namespace, slug)
 }
 
-// GetContentTextTypeByNSSlugInTxn retrieves a ContentTextType by a namespace
+// GetContentTypeTextByNSSlugInTxn retrieves a ContentTypeText by a namespace
 // and slug in the context of an existing transaction. See
 // GetContentTypeTextByNSSlug.
 func GetContentTypeTextByNSSlugInTxn(namespace string, slug string, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
   return getContentHelper(getContentByAuthIdQuery, ctx, txn, namespace, slug)
 }
 
-const getContentTextTypeByIDStatement string = CommonContentTypeTextGet + ` WHERE c.id=? `
+const getContentTypeTextByIDStatement string = CommonContentTypeTextGet + ` WHERE c.id=? `
 // GetContentTypeTextByID retrieves a ContentTypeText by internal ID. As the
 // internal ID must never be exposed to users, this method is exclusively for
-// internal/backend use. Specifically, since ContentTextType are associated with
+// internal/backend use. Specifically, since ContentTypeText are associated with
 // other Entities through the internal ID (i.e., foreign keys use the internal
-// ID), this function is most often used to retrieve a ContentTextType which is
+// ID), this function is most often used to retrieve a ContentTypeText which is
 // to be bundled in a response.
 //
 // Use GetContentTypeText to retrieve a ContentTypeText in response to an API
@@ -216,40 +216,37 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
 	return content, nil
 }
 
-// UpdatesContent updates the canonical Content record. Attempting to update a
-// non-existent Content results in a rest.NotFoundError.
-func UpdateContent(p *ContentTypeText, ctx context.Context) (*ContentTypeText, rest.RestError) {
+const updateContentStatement = `UPDATE content c JOIN content_type_text ctt ON c.id=ctt.id JOIN entities e ON c.id=e.id SET e.last_updated=0, c.extern_path=?, c.namespace, c.slug, WHERE e.pub_id=?`
+
+// UpdatesTypeTextContent updates the ContentTextType excepting the Type and
+// Contributors. Note the following caveats:
+// * Contritbutors are udpated separately for efficiency via
+//   UpdateContentContributors.
+// * Type cannot be updated. Attempting to change Type will cause an error, and
+//   the UI data model should not allow such changes in the first insance.
+//
+// Attempting to update a non-existent ContentTypeText
+// results in a rest.NotFoundError.
+func UpdateTypeTextContent(c *ContentTypeText, ctx context.Context) (*ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
     return nil, rest.ServerError("Could not update content record.", err)
   }
 
-  newP, restErr := UpdateContentInTxn(p, ctx, txn)
+  newC, restErr := UpdateContentInTxn(c, ctx, txn)
   // txn already rolled back if in error, so we only need to commit if no error
   if restErr == nil {
     defer txn.Commit()
   }
 
-  return newP, restErr
+  return newC, restErr
 }
 
-// UpdatesContentInTxn updates the canonical Content record within an existing
-// transaction. See UpdateContent.
-func UpdateContentInTxn(p *Content, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
-  if c.Addresses != nil {
-    c.Addresses.CompleteAddresses(ctx)
-  }
-  var err error
-  if c.Addresses != nil {
-    if restErr := c.Addresses.Update(c.PubId.String, ctx, txn); restErr != nil {
-      defer txn.Rollback()
-      // TODO: this message could be misleading; like the content was updated, and just the addresses not
-      return nil, restErr
-    }
-  }
-
-  var updateStmt *sql.Stmt = txn.Stmt(updateContentQuery)
+// UpdatesContentTypeTextInTxn updates the ContentTypeText record within an existing
+// transaction. See UpdateContentTypeText.
+func UpdateContentTypeTextInTxn(c *Content, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
+  var updateStmt *sql.Stmt = txn.Stmt(updateContentTypeTextQuery)
   _, err = updateStmt.Exec(c.Active, c.LegalID, c.LegalIDType, c.DisplayName, c.Phone, c.Email, c.PhoneBackup, c.PubId)
   if err != nil {
     if txn != nil {
@@ -269,8 +266,11 @@ func UpdateContentInTxn(p *Content, ctx context.Context, txn *sql.Tx) (*Content,
   return newContent, nil
 }
 
+func UpdateContentContributors(c *Content, ctx context.Context, txn *sql.Tx) *Context, rest.RestError {
+  foo()
+}
+
 // TODO: enable update of AuthID
-const updateContentStatement = `UPDATE content c JOIN users u ON u.id=c.id JOIN entities e ON c.id=e.id SET u.active=?, u.legal_id=?, u.legal_id_type=?, c.display_name=?, c.phone=?, c.email=?, c.phone_backup=?, e.last_updated=0 WHERE e.pub_id=?`
 var createContentQuery, updateContentQuery, getContentQuery, getContentByAuthIdQuery, getContentByIDQuery *sql.Stmt
 func SetupDB(db *sql.DB) {
   var err error
