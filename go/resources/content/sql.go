@@ -19,7 +19,7 @@ var ContentSorts = map[string]string{
   `title-desc`: `c.content DESC `,
 }
 
-func ScanContentSummary(row *sql.Rows) (*ContentSummary, *ContributorSummary, error) {
+func scanContentSummary(row *sql.Rows) (*ContentSummary, *ContributorSummary, error) {
 	var c ContentSummary
   var p ContributorSummary
 
@@ -32,7 +32,7 @@ func ScanContentSummary(row *sql.Rows) (*ContentSummary, *ContributorSummary, er
 	return &c, &p, nil
 }
 
-func ScanContentTypeTextDetail(row *sql.Rows) (*Content, *locations.Address, error) {
+func scanContentTypeTextDetail(row *sql.Rows) (*Content, *locations.Address, error) {
   var c Content
   var p ContributorSummary
 
@@ -50,7 +50,7 @@ func ScanContentTypeTextDetail(row *sql.Rows) (*Content, *locations.Address, err
 func BuildContentResults(rows *sql.Rows) (interface{}, error) {
   results := make([]*ContentSummary, 0)
   for rows.Next() {
-    content, err := ScanContentSummary(rows)
+    content, err := scanContentSummary(rows)
     if err != nil {
       return nil, err
     }
@@ -196,7 +196,7 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
     // The way the scanner works, it processes all the data each time. :(
     // 'content' gets updated with an equivalent structure while we gather up
     // the contributors.
-    if content, contributor, err = ScanContentDetail(rows); err != nil {
+    if content, contributor, err = scanContentDetail(rows); err != nil {
       return nil, rest.ServerError(fmt.Sprintf("Problem getting data for content: '%v'", id), err)
     }
 
