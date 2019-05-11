@@ -121,9 +121,6 @@ func (c *ContentTypeText) CreateContentTypeTextInTxn(ctx context.Context, txn *s
   return newContent, nil
 }
 
-const CommonContentTypeTextGet string = `SELECT ` + CommonContentFields + CommonContentTypeTextFields + CommonContentFrom + CommonContentTypeTextFrom
-const getContentTypeTextQuery string = CommonContentTypeTextGet + `WHERE e.pub_id=? `
-
 // GetContentTypeText retrieves a ContentTypeText from a public ID string
 // (UUID). Attempting to  retrieve a non-existent item results in a
 // rest.NotFoundError. This is used primarily to retrieve an item in response to
@@ -142,7 +139,6 @@ func GetContentTypeTextInTxn(pubID string, ctx context.Context, txn *sql.Tx) (*C
   return getContentTypeTextHelper(getContentTypeTextStmt, ctx, txn, pubID)
 }
 
-const getContentTypeTextByNSSlugQuery string = CommonContentTypeTextGet + ` WHERE c.namespace=? AND c.slug=? `
 // GetContentTypeTextByNSSlug retrieves a ContentTypeText from a content
 // namespace and slug. Attempting to retrieve a non-existent item results in a
 // rest.NotFoundError. This is used primarily to retrieve an item in response to
@@ -158,7 +154,6 @@ func GetContentTypeTextByNSSlugInTxn(namespace string, slug string, ctx context.
   return getContentHelper(getContentByAuthIdStmt, ctx, txn, namespace, slug)
 }
 
-const getContentTypeTextByIDQuery string = CommonContentTypeTextGet + ` WHERE c.id=? `
 // GetContentTypeTextByID retrieves a ContentTypeText by internal ID. As the
 // internal ID must never be exposed to users, this method is exclusively for
 // internal/backend use. Specifically, since ContentTypeText are associated with
@@ -211,7 +206,6 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
 	return content, nil
 }
 
-const updateContentQuery = `UPDATE content c JOIN content_type_text ctt ON c.id=ctt.id JOIN entities e ON c.id=e.id SET e.last_updated=0, c.title=?, c.summary=?, c.extern_path=?, c.namespace=?, c.slug=?, ctt.format=? WHERE e.pub_id=?`
 // UpdateContentTypeTextContent updates the ContentTextType excepting the Type and
 // Contributors. Note the following caveats:
 // * Contritbutors are udpated separately for efficiency via
