@@ -70,7 +70,7 @@ func ContentGeneralWhereGenerator(term string, params []interface{}) (string, []
   return whereBit, params, nil
 }
 
-func CreateTypeTextContent(c *ContentTypeText, ctx context.Context) (*ContentText, rest.RestError) {
+func (c *ContentTypeText) CreateTypeTextContent(ctx context.Context) (*ContentText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
@@ -84,7 +84,7 @@ func CreateTypeTextContent(c *ContentTypeText, ctx context.Context) (*ContentTex
   return newP, restErr
 }
 
-func CreateContentTypeTextInTxn(c *ContentTypeText, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
+func (c *ContentTypeText) CreateContentTypeTextInTxn(ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
   contribInsStmt = txn.Stmt(contributorInsertByID)
 
   var err error
@@ -212,7 +212,7 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
 }
 
 const updateContentQuery = `UPDATE content c JOIN content_type_text ctt ON c.id=ctt.id JOIN entities e ON c.id=e.id SET e.last_updated=0, c.title=?, c.summary=?, c.extern_path=?, c.namespace=?, c.slug=?, ctt.format=? WHERE e.pub_id=?`
-// UpdatesTypeTextContent updates the ContentTextType excepting the Type and
+// UpdateContentTypeTextContent updates the ContentTextType excepting the Type and
 // Contributors. Note the following caveats:
 // * Contritbutors are udpated separately for efficiency via
 //   UpdateContentContributors.
@@ -224,7 +224,7 @@ const updateContentQuery = `UPDATE content c JOIN content_type_text ctt ON c.id=
 //
 // Attempting to update a non-existent ContentTypeText
 // results in a rest.NotFoundError.
-func UpdateTypeTextContent(c *ContentTypeText, ctx context.Context) (*ContentTypeText, rest.RestError) {
+func (c *ContentTypeText) UpdateConentTypeTextContent(ctx context.Context) (*ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
@@ -242,7 +242,7 @@ func UpdateTypeTextContent(c *ContentTypeText, ctx context.Context) (*ContentTyp
 
 // UpdatesContentTypeTextInTxn updates the ContentTypeText record within an existing
 // transaction. See UpdateContentTypeText.
-func UpdateContentTypeTextInTxn(c *ContentTypeText, ctx context.Context, txn *sql.Tx) (*Content, rest.RestError) {
+func (c *ContentTypeText) UpdateContentTypeTextInTxn(ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
   var err
   if (c.ExternPath == nil || c.ExternPath.IsNull()) {
     updateStmt := txn.Stmt(updateContentTypeTextWithTextStmt)
@@ -266,7 +266,7 @@ func UpdateContentTypeTextInTxn(c *ContentTypeText, ctx context.Context, txn *sq
   return newContent, nil
 }
 
-func UpdateContentContributors(c *ContentSummary, ctx context.Context) *Context, rest.RestError {
+func (c *ContentTypeText) UpdateContentContributors(ctx context.Context) *ContentTypeText, rest.RestError {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
@@ -280,7 +280,7 @@ func UpdateContentContributors(c *ContentSummary, ctx context.Context) *Context,
   return newC, restErr
 }
 
-func UpdateContentContributorsInTxn(c *ContentSummary, ctx context.Context, txn *sql.Tx) *ContentSummary, rest.RestError {
+func (c *ContentSummary) UpdateContentContributorsInTxn(ctx context.Context, txn *sql.Tx) *ContentSummary, rest.RestError {
   delStmt := txn.Stmt(deleteContributorsStmt)
   insStmt := txn.Stmt(insertContributorsStmt)
 
@@ -297,8 +297,4 @@ func UpdateContentContributorsInTxn(c *ContentSummary, ctx context.Context, txn 
   }
 
    GetContentSummaryInTxn(c.PubId, ctx, txn)
-}
-
-func UpdateContentTypeTextText(c *Content, ctx context.Context, txn *sql.Tx) *Context, rest.RestError {
-
 }

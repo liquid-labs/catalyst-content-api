@@ -14,7 +14,7 @@ import (
 const relativePath = regexp.MustCompile(`^[a-zA-Z0-9_-][a-zA-Z0-9/_-]*`)
 const httpRe = regexp.MustCompile(`^https?://`)
 
-func SyncContentTypeText(c *ContentTypeText, ctx context.Context) *ContentTypeText, rest.RestError {
+func (c *ContentTypeText) SyncContentTypeText(ctx context.Context) *ContentTypeText, rest.RestError {
   if c.ExternPath.IsNull { // nothing to do
     return c, nil
   }
