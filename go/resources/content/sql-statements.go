@@ -20,6 +20,7 @@ const getContentTypeTextByNSSlugQuery string = CommonContentTypeTextGet + ` WHER
 const getContentTypeTextByIDQuery string = CommonContentTypeTextGet + ` WHERE c.id=? `
 // update
 const updateContentQuery = `UPDATE content c JOIN content_type_text ctt ON c.id=ctt.id JOIN entities e ON c.id=e.id SET e.last_updated=0, c.title=?, c.summary=?, c.extern_path=?, c.namespace=?, c.slug=?, ctt.format=? WHERE e.pub_id=?`
+const updateContentTypeTextWithTextQuery = `UPDATE content c JOIN content_type_text ctt ON c.id=ctt.id JOIN entities e ON c.id=e.id SET e.last_updated=0, c.title=?, c.summary=?, c.extern_path=?, c.namespace=?, c.slug=?, ctt.format=?, ctt.text=? WHERE e.pub_id=?`
 const contributorsDeleteQuery = `DELETE * FROM contributors WHERE content=?`
 const contributorsInsertQuery = `INSERT INTO contributors (id, content, role, summary_credit_order) SELECT persons.id, content.id, ?, ? FROM persons p JOIN content c ON p.pub_id=? AND c.pub_id=?`
 const contributorInsertByContentIDQuery = `INSERT INTO contributors (id, content, role, summary_credit_order) SELECT persons.id, ?, ?, ? FROM persons p WHERE p.pub_id=?`

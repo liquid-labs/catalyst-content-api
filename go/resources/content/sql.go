@@ -225,7 +225,7 @@ func (c *ContentTypeText) UpdateConentTypeTextContent(ctx context.Context) (*Con
     return nil, rest.ServerError("Could not update content record.", err)
   }
 
-  newC, restErr := UpdateContentInTxn(c, ctx, txn)
+  newC, restErr := UpdateContenTypeTexttInTxn(c, ctx, txn)
   // txn already rolled back if in error, so we only need to commit if no error
   if restErr == nil {
     defer txn.Commit()
