@@ -46,7 +46,7 @@ func (c *ContentTypeText) SyncContentTypeText(ctx context.Context) *ContentTypeT
       return nil, rest.ServerError(fmt.Sprintf(`Could not read external content body from '%s'.`, externPath), err)
     } else {
       c.Text = nulls.NewString(body)
-      c.LastSync = time.Now().Unix()
+      c.LastSync = 0 // will be updated by trigger
 
       if newC, err := UpdateContentTextType(c, ctx); err != nil {
         return nil, err
