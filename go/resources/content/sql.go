@@ -260,6 +260,36 @@ func (c *ContentTypeText) UpdateContentTypeTextInTxn(ctx context.Context, txn *s
   return newContent, nil
 }
 
+func (c *ContentTypeText) UpdateContentTypeTextOnlyText(ctx context.Context) (*ContentTypeText, rest.RestError) {
+  txn, err := sqldb.DB.Begin()
+  if err != nil {
+    defer txn.Rollback()
+    return nil, rest.ServerError("Could not update content record.", err)
+  }
+
+  var err
+  updateStmt := txn.Stmt(updateContentTypeTextOnlyTextStmt)
+  _, err = updateStmt.Exec(c.Text, c.PubId)
+
+  if err != nil {
+    if txn != nil {
+      defer txn.Rollback()
+    }
+    return nil, rest.ServerError("Could not update content record.", err)
+  }
+
+  newContent, err := GetContentInTxn(c.PubId.String, ctx, txn)
+  if err != nil {
+    return nil, rest.ServerError("Problem retrieving newly updated content.", err)
+  }
+
+  if restErr == nil {
+    defer txn.Commit()
+  }
+
+  return newC, restErr
+}
+
 func (c *ContentTypeText) UpdateContentContributors(ctx context.Context) *ContentTypeText, rest.RestError {
   txn, err := sqldb.DB.Begin()
   if err != nil {
