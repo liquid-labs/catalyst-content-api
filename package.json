@@ -1,0 +1,59 @@
+{
+  "name": "@liquid-labs/catalyst-content-api",
+  "version": "1.0.0-prototype.0",
+  "description": "Catalyst model definition for 'content' and related resources.",
+  "files": [
+    "go/",
+    "go.mod",
+    "go.sum",
+    ".catalyst"
+  ],
+  "scripts": {
+    "build": "catalyst-scripts build",
+    "prepare": "npm run build",
+    "pretest": "TEST_TYPES=unit catalyst-scripts pretest",
+    "test": "TEST_TYPES=unit catalyst-scripts test",
+    "postversion": "git push && git push --tags",
+    "lint": "catalyst-scripts lint",
+    "lint-fix": "catalyst-scripts lint-fix",
+    "watch": "catalyst-scripts watch",
+    "postyalc": "chmod a+x ~/.yalc/packages/@liquid-labs/catalyst-core-api/*/bin/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Liquid-Labs/catalyst-content-api.git"
+  },
+  "author": "Zane Rockenbaugh <zane@liquid-labs.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Liquid-Labs/catalyst-content-api/issues"
+  },
+  "homepage": "https://github.com/Liquid-Labs/catalyst-content-api#readme",
+  "devDependencies": {
+    "@liquid-labs/catalyst-content-model": "^1.0.0-prototype.0",
+    "@liquid-labs/catalyst-core-api": "^1.0.0-prototype.11",
+    "@liquid-labs/catalyst-persons-api": "^1.0.0-prototype.6",
+    "@liquid-labs/catalyst-scripts": "^1.0.0-alpha.22",
+    "@liquid-labs/regex-repo": "^1.0.0-alpha.3",
+    "@liquid-labs/restful-paths": "^1.0.0-prototype.2",
+    "lodash.omit": "^4.5.0",
+    "lodash.reduce": "^4.6.0",
+    "moment-timezone": "^0.5.25",
+    "normalizr": "^3.3.0",
+    "redux": "^4.0.1",
+    "redux-thunk": "^2.3.0"
+  },
+  "peerDependencies": {
+    "@liquid-labs/catalyst-content-model": "^1.0.0-prototype.0",
+    "@liquid-labs/catalyst-core-api": "^1.0.0-prototype.11",
+    "@liquid-labs/catalyst-persons-api": "^1.0.0-prototype.6",
+    "@liquid-labs/regex-repo": "^1.0.0-alpha.3",
+    "@liquid-labs/restful-paths": "^1.0.0-prototype.2",
+    "lodash.omit": "^4.5.0",
+    "lodash.reduce": "^4.6.0",
+    "moment-timezone": "^0.5.25",
+    "normalizr": "^3.3.0",
+    "redux": "^4.0.1",
+    "redux-thunk": "^2.3.0"
+  }
+}

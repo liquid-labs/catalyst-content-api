@@ -4,13 +4,13 @@ import (
   "context"
   "database/sql"
   "fmt"
-  "strconv"
 
   "github.com/Liquid-Labs/go-api/sqldb"
   "github.com/Liquid-Labs/go-nullable-mysql/nulls"
   "github.com/Liquid-Labs/go-rest/rest"
-  "github.com/Liquid-Labs/catalyst-core-api/go/resources/users"
-  "github.com/Liquid-Labs/catalyst-core-api/go/resources/locations"
+  "github.com/Liquid-Labs/catalyst-core-api/go/resources/entities"
+
+  model "github.com/Liquid-Labs/catalyst-content-model/go/resources/content"
 )
 
 var ContentSorts = map[string]string{
@@ -19,28 +19,28 @@ var ContentSorts = map[string]string{
   `title-desc`: `c.content DESC `,
 }
 
-func scanContentSummary(row *sql.Rows) (*ContentSummary, *ContributorSummary, error) {
-	var c ContentSummary
-  var p ContributorSummary
+func scanContentSummary(row *sql.Rows) (*model.ContentSummary, *model.ContributorSummary, error) {
+	var c model.ContentSummary
+  var p model.ContributorSummary
 
 	if err := row.Scan(&c.PubId, &c.LastUpdated, &c.Title, &c.Summary, &c.Namespace, &c.Slug, &c.Type,
       /* limited person data */ &p.PubId, &p.DisplayName,
       /* contrib specific data */ &p.Role, &p.SummaryCreditOrder); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	return &c, &p, nil
 }
 
-func scanContentTypeTextDetail(row *sql.Rows) (*Content, *locations.Address, error) {
-  var c Content
-  var p ContributorSummary
+func scanContentTypeTextDetail(row *sql.Rows) (*model.ContentTypeText, *model.ContributorSummary, error) {
+  var c model.ContentTypeText
+  var p model.ContributorSummary
 
 	if err := row.Scan(&c.PubId, &c.LastUpdated, &c.Title, &c.Summary, &c.Namespace, &c.Slug, &c.Type,
       &c.ExternPath, &c.LastSync, &c.VersionCookie, &c.Format, &c.Text,
       /* limited person data */ &p.PubId, &p.DisplayName,
-      /* contrib specific data */ &p.Role, &p.SummaryCreditOrder); err != nil {); err != nil {
-		return nil, err
+      /* contrib specific data */ &p.Role, &p.SummaryCreditOrder); err != nil {
+		return nil, nil, err
 	}
 
 	return &c, &p, nil
@@ -48,13 +48,26 @@ func scanContentTypeTextDetail(row *sql.Rows) (*Content, *locations.Address, err
 
 // implement rest.ResultBuilder
 func BuildContentResults(rows *sql.Rows) (interface{}, error) {
-  results := make([]*ContentSummary, 0)
+  var lastID int64 = 0
+  results := make([]*model.ContentSummary, 0)
+  contributors := make([]*model.ContributorSummary, 0)
+  var content *model.ContentSummary
   for rows.Next() {
-    content, err := scanContentSummary(rows)
+    content, contributor, err := scanContentSummary(rows)
     if err != nil {
       return nil, err
     }
 
+    contributors = append(contributors, contributor)
+    if lastID != content.Id.Int64 {
+      content.Contributors = contributors
+      results = append(results, content)
+      contributors = make([]*model.ContributorSummary, 0)
+    }
+  }
+
+  if content != nil {
+    content.Contributors = contributors
     results = append(results, content)
   }
 
@@ -70,7 +83,7 @@ func ContentGeneralWhereGenerator(term string, params []interface{}) (string, []
   return whereBit, params, nil
 }
 
-func (c *ContentTypeText) CreateTypeTextContent(ctx context.Context) (*ContentText, rest.RestError) {
+func CreateContentTypeText(c *model.ContentTypeText, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
@@ -84,16 +97,28 @@ func (c *ContentTypeText) CreateTypeTextContent(ctx context.Context) (*ContentTe
   return newP, restErr
 }
 
-func (c *ContentTypeText) CreateContentTypeTextInTxn(ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
-  contribInsStmt = txn.Stmt(contributorInsertByID)
-
-  var err error
-  newID, restErr := users.createContentInTxn(c.ContentSummary, txn)
-  if restErr != nil {
+func createContentSummaryInTxn(c *model.ContentSummary, txn *sql.Tx) (int64, rest.RestError) {
+  if id, restErr := entities.CreateEntityInTxn(txn); restErr != nil {
     defer txn.Rollback()
+    return 0, restErr
+  } else {
+    createStmt := txn.Stmt(createContentStmt)
+    _, err := createStmt.Exec(id, c.ExternPath, c.Slug, c.Type, c.Title, c.Summary, c.VersionCookie)
+    if (err != nil) {
+      defer txn.Rollback()
+      return 0, rest.ServerError("Could not create content record; error creating content.", err)
+    }
+    return id, nil
+  }
+}
+
+func CreateContentTypeTextInTxn(c *model.ContentTypeText, ctx context.Context, txn *sql.Tx) (*model.ContentTypeText, rest.RestError) {
+  var err error
+  newID, restErr := createContentSummaryInTxn(&c.ContentSummary, txn)
+  if restErr != nil {
+    // already rolled back
 		return nil, restErr
   }
-
   c.Id = nulls.NewInt64(newID)
 
 	_, err = txn.Stmt(createContentTypeTextStmt).Exec(newID, c.Format, c.Text)
@@ -103,11 +128,12 @@ func (c *ContentTypeText) CreateContentTypeTextInTxn(ctx context.Context, txn *s
 		return nil, rest.UnprocessableEntityError("Failure creating content.", err)
 	}
 
-  for contrib, _ := range c.Contributors {
+  contribInsStmt := txn.Stmt(contributorInsertWithContentIDStmt)
+  for _, contrib := range c.Contributors {
     if _, err := contribInsStmt.ExecContext(ctx, newID, contrib.Role, contrib.SummaryCreditOrder, contrib.PubId); err != nil {
       defer txn.Rollback()
       // TODO: can we tell more about why? We're assuming bad data here.
-      return nil, rest.UnprocessableEntityError("Error updating contributors. Possible bad data.")
+      return nil, rest.UnprocessableEntityError("Error updating contributors. Possible bad data.", nil)
     }
   }
 
@@ -121,59 +147,59 @@ func (c *ContentTypeText) CreateContentTypeTextInTxn(ctx context.Context, txn *s
   return newContent, nil
 }
 
-// GetContentTypeText retrieves a ContentTypeText from a public ID string
+// GetContentTypeText retrieves a model.ContentTypeText from a public ID string
 // (UUID). Attempting to  retrieve a non-existent item results in a
 // rest.NotFoundError. This is used primarily to retrieve an item in response to
 // an API request.
 //
-// Consider using GetContentTypeTextByID to retrieve a ContentTypeText from
+// Consider using GetContentTypeTextByID to retrieve a model.ContentTypeText from
 // another backend/DB function. TODO: reference discussion of internal vs public
 // IDs.
-func GetContentTypeText(pubID string, ctx context.Context) (*ContentTypeText, rest.RestError) {
+func GetContentTypeText(pubID string, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
   return getContentTypeTextHelper(getContentTypeTextStmt, ctx, nil, pubID)
 }
 
-// GetContentTypeTextInTxn retrieves a ContentTypeText by public ID string (UUID)
+// GetContentTypeTextInTxn retrieves a model.ContentTypeText by public ID string (UUID)
 //  in the context of an existing transaction. See GetContentTypeText.
-func GetContentTypeTextInTxn(pubID string, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
+func GetContentTypeTextInTxn(pubID string, ctx context.Context, txn *sql.Tx) (*model.ContentTypeText, rest.RestError) {
   return getContentTypeTextHelper(getContentTypeTextStmt, ctx, txn, pubID)
 }
 
-// GetContentTypeTextByNSSlug retrieves a ContentTypeText from a content
+// GetContentTypeTextByNSSlug retrieves a model.ContentTypeText from a content
 // namespace and slug. Attempting to retrieve a non-existent item results in a
 // rest.NotFoundError. This is used primarily to retrieve an item in response to
 // an API request.
-func GetContentTypeTextByNSSlug(namespace string, slug string, ctx context.Context) (*ContentTypeText, rest.RestError) {
-  return getContentHelper(getContentByNSSlugStmt, ctx, nil, namespace, slug)
+func GetContentTypeTextByNSSlug(namespace string, slug string, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentTypeTextByNSSlugStmt, ctx, nil, namespace, slug)
 }
 
-// GetContentTypeTextByNSSlugInTxn retrieves a ContentTypeText by a namespace
+// GetContentTypeTextByNSSlugInTxn retrieves a model.ContentTypeText by a namespace
 // and slug in the context of an existing transaction. See
 // GetContentTypeTextByNSSlug.
-func GetContentTypeTextByNSSlugInTxn(namespace string, slug string, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
-  return getContentHelper(getContentByAuthIdStmt, ctx, txn, namespace, slug)
+func GetContentTypeTextByNSSlugInTxn(namespace string, slug string, ctx context.Context, txn *sql.Tx) (*model.ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentTypeTextByNSSlugStmt, ctx, txn, namespace, slug)
 }
 
-// GetContentTypeTextByID retrieves a ContentTypeText by internal ID. As the
+// GetContentTypeTextByID retrieves a model.ContentTypeText by internal ID. As the
 // internal ID must never be exposed to users, this method is exclusively for
-// internal/backend use. Specifically, since ContentTypeText are associated with
+// internal/backend use. Specifically, since model.ContentTypeText are associated with
 // other Entities through the internal ID (i.e., foreign keys use the internal
-// ID), this function is most often used to retrieve a ContentTypeText which is
+// ID), this function is most often used to retrieve a model.ContentTypeText which is
 // to be bundled in a response.
 //
-// Use GetContentTypeText to retrieve a ContentTypeText in response to an API
+// Use GetContentTypeText to retrieve a model.ContentTypeText in response to an API
 // request. TODO: reference discussion of internal vs public IDs.
-func GetContentTypeTextByID(id int64, ctx context.Context) (*ContentTypeText, rest.RestError) {
+func GetContentTypeTextByID(id int64, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
   return getContentTypeTextHelper(getContentTypeTextByIDStmt, ctx, nil, id)
 }
 
 // GetContentByIDInTxn retrieves a Content by internal ID in the context of an
 // existing transaction. See GetContentByID.
-func GetContentTypeTextByIDInTxn(id int64, ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
-  return getContentTypeTextHelper(getContentByIDStmt, ctx, txn, id)
+func GetContentTypeTextByIDInTxn(id int64, ctx context.Context, txn *sql.Tx) (*model.ContentTypeText, rest.RestError) {
+  return getContentTypeTextHelper(getContentTypeTextByIDStmt, ctx, txn, id)
 }
 
-func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, ids ...interface{}) (*ContentTypeText, rest.RestError) {
+func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, ids ...interface{}) (*model.ContentTypeText, rest.RestError) {
   if txn != nil {
     stmt = txn.Stmt(stmt)
   }
@@ -183,16 +209,16 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
 	}
 	defer rows.Close()
 
-	var content *ContentTypeText
-  var contributor ContributorSummary
-  var contributors ContributorSummaries = make(ContributorSummaries, 0)
+	var content *model.ContentTypeText
+  var contributor *model.ContributorSummary
+  var contributors model.ContributorSummaries = make(model.ContributorSummaries, 0)
 	for rows.Next() {
     var err error
     // The way the scanner works, it processes all the data each time. :(
     // 'content' gets updated with an equivalent structure while we gather up
     // the contributors.
-    if content, contributor, err = scanContentDetail(rows); err != nil {
-      return nil, rest.ServerError(fmt.Sprintf("Problem getting data for content: '%v'", id), err)
+    if content, contributor, err = scanContentTypeTextDetail(rows); err != nil {
+      return nil, rest.ServerError(fmt.Sprintf("Problem getting data for content: '%v'", ids), err)
     }
 
     contributors = append(contributors, contributor)
@@ -200,14 +226,14 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
   if content != nil {
     content.Contributors = contributors
   } else {
-    return nil, rest.NotFoundError(fmt.Sprintf(`Content '%s' not found.`, id), nil)
+    return nil, rest.NotFoundError(fmt.Sprintf(`Content '%v' not found.`, ids), nil)
   }
 
 	return content, nil
 }
 
-// UpdateContentTypeTextContent updates the ContentTextType excepting the Type and
-// Contributors. Note the following caveats:
+// UpdateContentTypeText updates the ContentTextType excepting the Type and
+// Contributors. Note thxte following caveats:
 // * Contritbutors are udpated separately for efficiency via
 //   UpdateContentContributors.
 // * Type cannot be updated. Attempting to change Type will cause an error, and
@@ -216,16 +242,16 @@ func getContentTypeTextHelper(stmt *sql.Stmt, ctx context.Context, txn *sql.Tx, 
 //   updated locally. Otherwise, the text is unchanged and users will instead
 //   SyncContentTypeText to update the local text.
 //
-// Attempting to update a non-existent ContentTypeText
+// Attempting to update a non-existent model.ContentTypeText
 // results in a rest.NotFoundError.
-func (c *ContentTypeText) UpdateConentTypeTextContent(ctx context.Context) (*ContentTypeText, rest.RestError) {
+func UpdateContentTypeText(c *model.ContentTypeText, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
     return nil, rest.ServerError("Could not update content record.", err)
   }
 
-  newC, restErr := UpdateContenTypeTexttInTxn(c, ctx, txn)
+  newC, restErr := UpdateContentTypeTextInTxn(c, ctx, txn)
   // txn already rolled back if in error, so we only need to commit if no error
   if restErr == nil {
     defer txn.Commit()
@@ -234,16 +260,16 @@ func (c *ContentTypeText) UpdateConentTypeTextContent(ctx context.Context) (*Con
   return newC, restErr
 }
 
-// UpdatesContentTypeTextInTxn updates the ContentTypeText record within an existing
+// UpdatesContentTypeTextInTxn updates the model.ContentTypeText record within an existing
 // transaction. See UpdateContentTypeText.
-func (c *ContentTypeText) UpdateContentTypeTextInTxn(ctx context.Context, txn *sql.Tx) (*ContentTypeText, rest.RestError) {
-  var err
-  if (c.ExternPath == nil || c.ExternPath.IsNull()) {
+func UpdateContentTypeTextInTxn(c *model.ContentTypeText, ctx context.Context, txn *sql.Tx) (*model.ContentTypeText, rest.RestError) {
+  var err error
+  if (!c.ExternPath.IsValid()) {
     updateStmt := txn.Stmt(updateContentTypeTextWithTextStmt)
-    _, err = updateStmt.Exec(c.Title, c.Summray, c.ExternPath, c.Namespace, c.Slug, c.Format, c.Text, c.PubId)
+    _, err = updateStmt.Exec(c.Title, c.Summary, c.ExternPath, c.Namespace, c.Slug, c.Format, c.Text, c.PubId)
   } else {
     updateStmt := txn.Stmt(updateContentTypeTextSansTextStmt)
-    _, err = updateStmt.Exec(c.Title, c.Summray, c.ExternPath, c.Namespace, c.Slug, c.Format, c.PubId)
+    _, err = updateStmt.Exec(c.Title, c.Summary, c.ExternPath, c.Namespace, c.Slug, c.Format, c.PubId)
   }
   if err != nil {
     if txn != nil {
@@ -252,22 +278,21 @@ func (c *ContentTypeText) UpdateContentTypeTextInTxn(ctx context.Context, txn *s
     return nil, rest.ServerError("Could not update content record.", err)
   }
 
-  newContent, err := GetContentInTxn(c.PubId.String, ctx, txn)
+  newContent, restErr := GetContentTypeTextInTxn(c.PubId.String, ctx, txn)
   if err != nil {
-    return nil, rest.ServerError("Problem retrieving newly updated content.", err)
+    return nil, restErr
   }
 
   return newContent, nil
 }
 
-func (c *ContentTypeText) UpdateContentTypeTextOnlyText(ctx context.Context) (*ContentTypeText, rest.RestError) {
+func UpdateContentTypeTextOnlyText(c *model.ContentTypeText, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
     return nil, rest.ServerError("Could not update content record.", err)
   }
 
-  var err
   updateStmt := txn.Stmt(updateContentTypeTextOnlyTextStmt)
   _, err = updateStmt.Exec(c.Text, c.PubId)
 
@@ -278,25 +303,23 @@ func (c *ContentTypeText) UpdateContentTypeTextOnlyText(ctx context.Context) (*C
     return nil, rest.ServerError("Could not update content record.", err)
   }
 
-  newContent, err := GetContentInTxn(c.PubId.String, ctx, txn)
+  newContent, restErr := GetContentTypeTextInTxn(c.PubId.String, ctx, txn)
   if err != nil {
-    return nil, rest.ServerError("Problem retrieving newly updated content.", err)
-  }
-
-  if restErr == nil {
+    return nil, restErr
+  } else {
     defer txn.Commit()
   }
 
-  return newC, restErr
+  return newContent, nil
 }
 
-func (c *ContentTypeText) UpdateContentContributors(ctx context.Context) *ContentTypeText, rest.RestError {
+func UpdateContentTypeTextContributors(c *model.ContentTypeText, ctx context.Context) (*model.ContentTypeText, rest.RestError) {
   txn, err := sqldb.DB.Begin()
   if err != nil {
     defer txn.Rollback()
     return nil, rest.ServerError("Could not update content contributors. (txn error)", err)
   }
-  newC, restErr := UpdateContentContributorsInTxn(c, ctx, txn)
+  newC, restErr := UpdateContentTypeTextContributorsInTxn(c, ctx, txn)
   // txn already rolled back if in error, so we only need to commit if no error
   if err == nil {
     defer txn.Commit()
@@ -304,21 +327,21 @@ func (c *ContentTypeText) UpdateContentContributors(ctx context.Context) *Conten
   return newC, restErr
 }
 
-func (c *ContentSummary) UpdateContentContributorsInTxn(ctx context.Context, txn *sql.Tx) *ContentSummary, rest.RestError {
-  delStmt := txn.Stmt(deleteContributorsStmt)
-  insStmt := txn.Stmt(insertContributorsStmt)
+func UpdateContentTypeTextContributorsInTxn(c *model.ContentTypeText, ctx context.Context, txn *sql.Tx) (*model.ContentTypeText, rest.RestError) {
+  delStmt := txn.Stmt(contributorsDeleteStmt)
+  insStmt := txn.Stmt(contributorInsertStmt)
 
   if _, err := delStmt.ExecContext(ctx, c.Id); err != nil {
     defer txn.Rollback()
-    return nil, rest.ServerError("Error updating contributors (clear phase).")
+    return nil, rest.ServerError("Error updating contributors (clear phase).", err)
   }
-  for contrib, _ := range c.Contributors {
+  for _, contrib := range c.Contributors {
     if _, err := insStmt.ExecContext(ctx, contrib.Role, contrib.SummaryCreditOrder, contrib.PubId, c.PubId); err != nil {
       defer txn.Rollback()
       // TODO: can we tell more about why? We're assuming bad data here.
-      return nil, rest.UnprocessableEntityError("Error updating contributors. Possible bad data.")
+      return nil, rest.UnprocessableEntityError("Error updating contributors. Possible bad data.", err)
     }
   }
 
-   GetContentSummaryInTxn(c.PubId, ctx, txn)
+  return GetContentTypeTextInTxn(c.PubId.String, ctx, txn)
 }
