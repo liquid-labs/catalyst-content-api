@@ -41,7 +41,8 @@
     "moment-timezone": "^0.5.25",
     "normalizr": "^3.3.0",
     "redux": "^4.0.1",
-    "redux-thunk": "^2.3.0"
+    "redux-thunk": "^2.3.0",
+    "squirrelly": "^7.1.1"
   },
   "peerDependencies": {
     "@liquid-labs/catalyst-content-model": "^1.0.0-prototype.0",
@@ -55,5 +56,6 @@
     "normalizr": "^3.3.0",
     "redux": "^4.0.1",
     "redux-thunk": "^2.3.0"
-  }
+  },
+  "dependencies": {}
 }
