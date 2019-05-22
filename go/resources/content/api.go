@@ -3,7 +3,6 @@ package content
 import (
   "fmt"
   "net/http"
-  "os"
   "regexp"
 
   "github.com/gorilla/mux"
@@ -69,12 +68,18 @@ func detailHandler(w http.ResponseWriter, r *http.Request) {
     if uuidRe.MatchString(pubID) {
       result, err = GetContentTypeText(pubID, r.Context())
     } else {
-      namespace := os.Getenv(`CONTENT_NAMESPACE`)
-      if namespace == `` {
-        rest.HandleError(w, rest.ServerError(`No 'CONTENT_NAMESPACE' defined while attempting to retrieve content by slug.`, nil))
+      if namespace, ok := r.URL.Query()[`namespace`]; !ok || len(namespace) != 1 {
+        var msg string
+        if !ok {
+          msg = `Required 'namespace' parameter is missing.`
+        } else {
+          msg = `Must define single namespace parameter.`
+        }
+        rest.HandleError(w, rest.BadRequestError(msg, nil))
         return
+      } else {
+        result, err = GetContentTypeTextByNSSlug(namespace[0], pubID, r.Context())
       }
-      result, err = GetContentTypeTextByNSSlug(namespace, pubID, r.Context())
     }
     handlers.ProcessGenericResults(w, r, result, err, `Retrieve Content.`)
   }
