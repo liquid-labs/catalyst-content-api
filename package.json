@@ -4,6 +4,7 @@
   "description": "Catalyst model definition for 'content' and related resources.",
   "files": [
     "go/",
+    "app.yaml",
     "go.mod",
     "go.sum",
     ".catalyst"
@@ -57,5 +58,32 @@
     "redux": "^4.0.1",
     "redux-thunk": "^2.3.0"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "_catalystRequiresService": [
+    {
+      "iface": "sql-mysql",
+      "params-req": [],
+      "params-opt": [],
+      "config-const": []
+    },
+    {
+      "iface": "rest",
+      "params-req": [
+        "CLOUDSQL_INSTANCE_NAME",
+        "CLOUDSQL_CONNECTION_PROT",
+        "CLOUDSQL_CONNECTION_NAME",
+        "CLOUDSQL_CREDS",
+        "CLOUDSQL_DB",
+        "CLOUDSQL_USER",
+        "CLOUDSQL_PASSWORD",
+        "GCP_PROJECT_ID",
+        "FIREBASE_DB_URL",
+        "FIREBASE_CREDS_FILE"
+      ],
+      "params-opt": [],
+      "config-const": {
+        "ADD_GO_APP_CONTENT": "@liquid-labs/catalyst-content-api:go/app.yaml"
+      }
+    }
+  ]
 }
