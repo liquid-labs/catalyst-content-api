@@ -16,3 +16,5 @@ replace github.com/Liquid-Labs/catalyst-core-api => /Users/zane/playground/catal
 replace github.com/Liquid-Labs/catalyst-persons-api => /Users/zane/playground/catalyst-persons-api
 
 replace github.com/Liquid-Labs/catalyst-content-model => /Users/zane/playground/catalyst-content-model
+
+replace github.com/Liquid-Labs/catalyst-content-api => /Users/zane/playground/catalyst-content-api
