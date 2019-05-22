@@ -111,14 +111,14 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 const uuidReString = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}`
-const contentIdReString = `(?:` + uuidReString + `|[a-zA-Z0-9_-]+)`
+const contentIDReString = `(?:` + uuidReString + `|[a-zA-Z0-9_-]+)`
 var uuidRe *regexp.Regexp = regexp.MustCompile(uuidReString)
 
 func InitAPI(r *mux.Router) {
-  r.HandleFunc("/content/", pingHandler).Methods("PING")
+  r.HandleFunc("/", pingHandler).Methods("PING")
   r.HandleFunc("/content/", createHandler).Methods("POST")
   r.HandleFunc("/content/", listHandler).Methods("GET")
   r.HandleFunc("/{contextType:[a-z-]*[a-z]}/{contextID:" + uuidReString + "}/content/", listHandler).Methods("GET")
-  r.HandleFunc("/content/{pubID:" + contentIdReString + "}/", detailHandler).Methods("GET")
-  r.HandleFunc("/content/{pubID:" + contentIdReString + "}/", updateHandler).Methods("PUT")
+  r.HandleFunc("/content/{pubID:" + contentIDReString + "}/", detailHandler).Methods("GET")
+  r.HandleFunc("/content/{pubID:" + contentIDReString + "}/", updateHandler).Methods("PUT")
 }
