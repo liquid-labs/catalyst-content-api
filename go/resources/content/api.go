@@ -3,7 +3,6 @@ package content
 import (
   "fmt"
   "net/http"
-  "os"
   "regexp"
 
   "github.com/gorilla/mux"
@@ -42,6 +41,10 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
   handlers.ProcessGenericResults(w, r, data, restErr, `Creating Content.`)
 }
 
+func syncHandler(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func listHandler(w http.ResponseWriter, r *http.Request) {
   vars := mux.Vars(r)
   contextType := vars["contextType"]
@@ -69,12 +72,18 @@ func detailHandler(w http.ResponseWriter, r *http.Request) {
     if uuidRe.MatchString(pubID) {
       result, err = GetContentTypeText(pubID, r.Context())
     } else {
-      namespace := os.Getenv(`CONTENT_NAMESPACE`)
-      if namespace == `` {
-        rest.HandleError(w, rest.ServerError(`No 'CONTENT_NAMESPACE' defined while attempting to retrieve content by slug.`, nil))
+      if namespace, ok := r.URL.Query()[`namespace`]; !ok || len(namespace) != 1 {
+        var msg string
+        if !ok {
+          msg = `Required 'namespace' parameter is missing.`
+        } else {
+          msg = `Must define single namespace parameter.`
+        }
+        rest.HandleError(w, rest.BadRequestError(msg, nil))
         return
+      } else {
+        result, err = GetContentTypeTextByNSSlug(namespace[0], pubID, r.Context())
       }
-      result, err = GetContentTypeTextByNSSlug(namespace, pubID, r.Context())
     }
     handlers.ProcessGenericResults(w, r, result, err, `Retrieve Content.`)
   }
@@ -111,14 +120,15 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 const uuidReString = `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}`
-const contentIdReString = `(?:` + uuidReString + `|[a-zA-Z0-9_-]+)`
+const contentIDReString = `(?:` + uuidReString + `|[a-zA-Z0-9_-]+)`
 var uuidRe *regexp.Regexp = regexp.MustCompile(uuidReString)
 
 func InitAPI(r *mux.Router) {
-  r.HandleFunc("/content/", pingHandler).Methods("PING")
+  r.HandleFunc("/", pingHandler).Methods("PING")
   r.HandleFunc("/content/", createHandler).Methods("POST")
+  r.HandleFunc("/content/sync/", syncHandler).Methods("POST")
   r.HandleFunc("/content/", listHandler).Methods("GET")
   r.HandleFunc("/{contextType:[a-z-]*[a-z]}/{contextID:" + uuidReString + "}/content/", listHandler).Methods("GET")
-  r.HandleFunc("/content/{pubID:" + contentIdReString + "}/", detailHandler).Methods("GET")
-  r.HandleFunc("/content/{pubID:" + contentIdReString + "}/", updateHandler).Methods("PUT")
+  r.HandleFunc("/content/{pubID:" + contentIDReString + "}/", detailHandler).Methods("GET")
+  r.HandleFunc("/content/{pubID:" + contentIDReString + "}/", updateHandler).Methods("PUT")
 }
