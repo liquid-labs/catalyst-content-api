@@ -41,6 +41,10 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
   handlers.ProcessGenericResults(w, r, data, restErr, `Creating Content.`)
 }
 
+func syncHandler(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func listHandler(w http.ResponseWriter, r *http.Request) {
   vars := mux.Vars(r)
   contextType := vars["contextType"]
@@ -122,6 +126,7 @@ var uuidRe *regexp.Regexp = regexp.MustCompile(uuidReString)
 func InitAPI(r *mux.Router) {
   r.HandleFunc("/", pingHandler).Methods("PING")
   r.HandleFunc("/content/", createHandler).Methods("POST")
+  r.HandleFunc("/content/sync/", syncHandler).Methods("POST")
   r.HandleFunc("/content/", listHandler).Methods("GET")
   r.HandleFunc("/{contextType:[a-z-]*[a-z]}/{contextID:" + uuidReString + "}/content/", listHandler).Methods("GET")
   r.HandleFunc("/content/{pubID:" + contentIDReString + "}/", detailHandler).Methods("GET")

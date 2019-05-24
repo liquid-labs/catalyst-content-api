@@ -23,7 +23,7 @@ func scanContentSummary(row *sql.Rows) (*model.ContentSummary, *model.Contributo
 	var c model.ContentSummary
   var p model.ContributorSummary
 
-	if err := row.Scan(&c.PubId, &c.LastUpdated, &c.Title, &c.Summary, &c.Namespace, &c.Slug, &c.Type,
+	if err := row.Scan(&c.PubId, &c.LastUpdated, &c.Title, &c.Summary, &c.Namespace, &c.SourceType, &c.Slug, &c.Type,
       /* limited person data */ &p.PubId, &p.DisplayName,
       /* contrib specific data */ &p.Role, &p.SummaryCreditOrder); err != nil {
 		return nil, nil, err
@@ -36,7 +36,7 @@ func scanContentTypeTextDetail(row *sql.Rows) (*model.ContentTypeText, *model.Co
   var c model.ContentTypeText
   var p model.ContributorSummary
 
-	if err := row.Scan(&c.PubId, &c.LastUpdated, &c.Title, &c.Summary, &c.Namespace, &c.Slug, &c.Type,
+	if err := row.Scan(&c.PubId, &c.LastUpdated, &c.Title, &c.Summary, &c.Namespace, &c.SourceType, &c.Slug, &c.Type,
       &c.ExternPath, &c.LastSync, &c.VersionCookie, &c.Format, &c.Text,
       /* limited person data */ &p.PubId, &p.DisplayName,
       /* contrib specific data */ &p.Role, &p.SummaryCreditOrder); err != nil {
@@ -266,10 +266,10 @@ func UpdateContentTypeTextInTxn(c *model.ContentTypeText, ctx context.Context, t
   var err error
   if (!c.ExternPath.IsValid()) {
     updateStmt := txn.Stmt(updateContentTypeTextWithTextStmt)
-    _, err = updateStmt.Exec(c.Title, c.Summary, c.ExternPath, c.Namespace, c.Slug, c.Format, c.Text, c.PubId)
+    _, err = updateStmt.Exec(c.Title, c.Summary, c.ExternPath, c.Slug, c.Format, c.Text, c.PubId)
   } else {
     updateStmt := txn.Stmt(updateContentTypeTextSansTextStmt)
-    _, err = updateStmt.Exec(c.Title, c.Summary, c.ExternPath, c.Namespace, c.Slug, c.Format, c.PubId)
+    _, err = updateStmt.Exec(c.Title, c.Summary, c.ExternPath, c.Slug, c.Format, c.PubId)
   }
   if err != nil {
     if txn != nil {

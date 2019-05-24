@@ -3,6 +3,7 @@
   "version": "1.0.0-prototype.0",
   "description": "Catalyst model definition for 'content' and related resources.",
   "files": [
+    "dist/",
     "go/",
     "app.yaml",
     "go.mod",

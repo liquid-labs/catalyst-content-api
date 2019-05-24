@@ -7,6 +7,7 @@ require (
 	github.com/Liquid-Labs/go-nullable-mysql v1.0.2
 	github.com/Liquid-Labs/go-rest v1.0.0-prototype.3
 	github.com/gorilla/mux v1.7.1
+	github.com/xanzy/go-gitlab v0.17.0
 )
 
 replace github.com/Liquid-Labs/go-rest => /Users/zane/playground/go-rest
